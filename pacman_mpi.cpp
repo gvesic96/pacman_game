@@ -1,22 +1,11 @@
 /*PACMAN MPI PARALLEL IMPLEMENTATION*/
 
-/*
-Funkcije koje su potrebne:
-
-StartPoint funkcija koja odredjuje nasumicno pocetne pozicije pacmana, a kasnije i za duhove
-RandomWalk kretanje duhova/pacmana kroz mapu proizvoljno
-PrintMaze funkcija iscrtava izmenjenu matricu karaktera sa pacmanom
-*/
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpi.h>
 #include <time.h>
 
 #define MAT_DIM 21
-//ovo je neka moja pocetna velicina lavirinta
-
 
 const bool mazeMatrix[21][21] = {
 {0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0},
@@ -42,7 +31,7 @@ const bool mazeMatrix[21][21] = {
 {0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0}
 };
 
-//FUNKCIJA ZA ODREDJIVANJE POCETNIH POZICIJA PACMANA I DUHOVA
+
 void start_point(int coo[])
 {
 	//acessing global mazeMatrix
@@ -78,13 +67,12 @@ void start_point(int coo[])
 		}
 	    }
 	  }
-	  //printf("%d\n", count);
 	  int it = rand()%count;
 	  int start_point_x = x_start[it];
 	  int start_point_y = y_start[it];
 
 	  free(x_start);
-	  free(y_start);//oslobodio dinamicki alocirane nizove
+	  free(y_start);
 
 
 	coo[0] = start_point_x;
@@ -111,7 +99,7 @@ void refresh_pacman(char maze[MAT_DIM][MAT_DIM])
 	{
 		for(int j=0; j<MAT_DIM; j++)
 		{
-		  if(maze[i][j]=='C') maze[i][j]=' ';//postavi prazno mesto umesto pacmana, pre inicijalizacije nece uraditi nista
+		  if(maze[i][j]=='C') maze[i][j]=' ';//place blank space instead of pacman
 		}
 	}
 
@@ -119,7 +107,7 @@ void refresh_pacman(char maze[MAT_DIM][MAT_DIM])
 
 void pacman_move(int coor[], char c)
 {
-	//pacman_move pristupa mazeMatrix globalnoj promenljivoj kako bi utvrdio da li je kretanje na putanji, ako jeste vraca nove koordiante
+	//pacman_move changes coor[] array if movement is on path of ones in the mazeMatrix
 	int row, col;
 	row=coor[0];
 	col=coor[1];
@@ -161,7 +149,7 @@ void pacman_move(int coor[], char c)
 }
 
 
-int win_lose_play(char maze[MAT_DIM][MAT_DIM], int food, bool p_eaten)
+int win_lose_play(char maze[MAT_DIM][MAT_DIM], int food, bool p_eaten, int sc)
 {
 	char win[7] = {'Y','o','u',' ','w','o','n'};
 	char lose[9] = {'G','a','m','e',' ','o','v','e','r'};
@@ -175,6 +163,7 @@ int win_lose_play(char maze[MAT_DIM][MAT_DIM], int food, bool p_eaten)
 		maze[10][7+i]=win[i];
 	  }
 	  PrintMaze(maze);
+	  printf("YOUR SCORE IS: %d\n", sc);
 	}
 
 
@@ -186,6 +175,7 @@ int win_lose_play(char maze[MAT_DIM][MAT_DIM], int food, bool p_eaten)
 		maze[10][6+i]=lose[i];
 	  }
 	PrintMaze(maze);
+	printf("YOUR SCORE IS: %d\n", sc);
 	}
 
 
@@ -309,7 +299,7 @@ int main()
 		for(int j=0; j<MAT_DIM; j++)
 		{
 		  if(mazeMatrix[i][j]==0)
-		    {local_mat[i][j] = '|';} //proces nula kreira matricu charova kako bi kasnije mogao da je menja
+		    {local_mat[i][j] = '|';} //CORE 0 creates local matrix of chars so it can work with it
 		  else
 		  {
 		    local_mat[i][j] = '.';
@@ -345,7 +335,6 @@ int main()
     }//initialization of starting points for pacman and ghosts on process 0 and sending to other processes
 
 
-
     MPI_Barrier(MPI_COMM_WORLD);
     if(prank != 0)
     {
@@ -362,6 +351,7 @@ int main()
     while(1)
     {
 
+
 	if(prank != 0)
 	{
 	  MPI_Send(coordinates, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);//sent all coordinates to core 0
@@ -372,6 +362,7 @@ int main()
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(prank == 0)
 	{
+
 	  int buff_size = (csize-1)*2;
 	  int c_buff[buff_size];//coordinates buffer for receiving coordinates from other cores
 
@@ -381,6 +372,7 @@ int main()
 	    MPI_Recv(&c_buff[offset], 2, MPI_INT, source, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	    offset+=2;
 	  }
+
 
 	  //counting eaten points of food
 	  if(local_mat[c_buff[0]][c_buff[1]] == '.')
@@ -404,11 +396,9 @@ int main()
 	  {
 		local_mat[c_buff[offset]][c_buff[offset+1]] = 'D';
 		offset+=2;
-		/*printf("PLACED GHOST NUMBER :%d\n", i);//TESTING TESTING
-		for(int j=0; j<(csize-1)*2; j++)
-		{
-		  printf("%d ", c_buff[j]);
-		}*/
+
+		//printf("PLACED GHOST NUMBER :%d ", i);//TESTING TESTING
+		//printf("%d %d\n", c_buff[2*i], c_buff[(2*i)+1]);//TESTING TESTING
 	  }
 
 
@@ -429,24 +419,31 @@ int main()
 	  bool eaten = 0;
 	  eaten = collision_check(c_buff, buff_size);//checking for collision between pacman and ghost
 
+	  flag = win_lose_play(local_mat, food, eaten, score);
 
-	  flag = win_lose_play(local_mat, food, eaten);
-	  if(flag == 1 || flag == 0) {MPI_Bcast(&flag, 1, MPI_INT, 0, MPI_COMM_WORLD);}//za izlazak iz petlje   OVAJ BREAK MOZDA OVDE NE TREBA
-
-	  //unos karaktera W A S D za pomeranje pacmana
+	  //insert W A S D for moving pacman
 	  if(print_permit)
 		printf("Press w/a/s/d + enter : \n");
 
-	  char c;
-	  c = getchar();//getchar samples \n character as well -> solved with print_permit
-	  MPI_Send(&c, 1, MPI_CHAR, 1, 0, MPI_COMM_WORLD);
+	  char c='0';
+	  if(flag==2)
+	  {
+	    c = getchar();//getchar samples \n character as well -> solved with print_permit
+	    MPI_Send(&c, 1, MPI_CHAR, 1, 0, MPI_COMM_WORLD);
 
-	  if(c=='w' || c=='a' || c=='s' || c=='d')
+	    if(c=='w' || c=='a' || c=='s' || c=='d')
 		{print_permit = 1;}
-	  else
+	    else
 		{print_permit = 0;}
+	  }
 	}
 
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Bcast(&flag, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	if(flag==1 || flag==0)break;
 
 	//PACMAN CONTROL - CORE 1
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -457,21 +454,18 @@ int main()
 	  pacman_move(coordinates, c);
 	}
 
-
 	//GHOSTS CONTROL - CORE 2 3 ...
 	if(prank > 1)
 	{
 	  ghost_move(coordinates, &direction, &steps);//ghost_move function takes coordinates array that is already on core, received from initialization
-	  MPI_Send(coordinates, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);
 	}
-
 
 
 	MPI_Barrier(MPI_COMM_WORLD);
     }//while(1)
 
-    MPI_Finalize();
 
+    MPI_Finalize();
 
 
 	return 0;
