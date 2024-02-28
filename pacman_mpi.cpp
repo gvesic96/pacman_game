@@ -221,22 +221,22 @@ void ghost_move(int coor[], int* p_direction, int* p_steps)
 	  {
 	    case 0://down
 	    {
-		if(y==20) break;
+		if(y==20){y=0; break;}
 		y++;break;//reversed on print
 	    }
 	    case 1://up
 	    {
-		if(y==0) break;
+		if(y==0){y=20; break;}
 		y--;break;//reversed on print
 	    }
 	    case 2://left
 	    {
-		if(x==0) break;
+		if(x==0){x=20; break;}
 		x--;break;
 	    }
 	    case 3://right
 	    {
-		if(x==20) break;
+		if(x==20){x=0; break;}
 		x++;break;
 	    }
 	    default: break;
@@ -357,7 +357,7 @@ int main()
 
 	if(prank != 0)
 	{
-	  MPI_Send(coordinates, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);//sent all coordinates to core 0
+	  MPI_Send(coordinates, 2, MPI_INT, 0, 0, MPI_COMM_WORLD);//send all coordinates to core 0
 	}
 
 
@@ -422,12 +422,12 @@ int main()
 	  bool eaten = 0;
 	  eaten = collision_check(c_buff, buff_size, last_p_pos);//checking for collision between pacman and ghost
 	  last_p_pos[0]=c_buff[0];
-	  last_p_pos[1]=c_buff[1];//saving last position
+	  last_p_pos[1]=c_buff[1];//saving last position of pacman
 
 	  flag = win_lose_play(local_mat, food, eaten, score);
 
 	  //insert W A S D for moving pacman
-	  if(print_permit)
+	  if(print_permit && flag==2)
 		printf("Press w/a/s/d + enter : \n");
 
 	  char c='0';
