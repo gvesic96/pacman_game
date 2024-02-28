@@ -116,22 +116,22 @@ void pacman_move(int coor[], char c)
 	{
 	  case 'w' : //DOWN
 	  {
-	    if(row==0) break;
+	    if(row==0) {row = 20; break;}
 	    row--; break;//inverted row numbers in matrix top is 0 bot is 20
 	  }
 	  case 's' : //UP
 	  {
-	    if(row==20) break;
+	    if(row==20) {row = 0; break;}
 	    row++; break;//inverted row numbers in matrix top is 0 bot is 20
 	  }
 	  case 'a' : //LEFT
 	  {
-	    if(col==0) break;
+	    if(col==0) {col = 20; break;}
 	    col--; break;
 	  }
 	  case 'd' : //RIGHT
 	  {
-	    if(col==20) break;
+	    if(col==20) {col = 0; break;}
 	    col++; break;
 	  }
 	  default: break;//do not move
@@ -183,7 +183,8 @@ int win_lose_play(char maze[MAT_DIM][MAT_DIM], int food, bool p_eaten, int sc)
 }
 
 
-bool collision_check(int* buff, int buff_size)
+
+bool collision_check(int* buff, int buff_size, int* lpp)
 {
 	bool res=0;
 	int i=2;
@@ -191,7 +192,7 @@ bool collision_check(int* buff, int buff_size)
 	while(i<size)
 	{
 	//printf("BUFFER JE: %d\n", buff_size);
-	  if(buff[0]==buff[i] && buff[1]==buff[i+1])//buff01 is pacman, rest are ghosts
+	  if((buff[0]==buff[i] && buff[1]==buff[i+1]) || (lpp[0]==buff[i] && lpp[1]==buff[i+1]))//buff01 is pacman, rest are ghosts
 	  {
 	    res = 1;
 	    break;
@@ -288,7 +289,7 @@ int main()
     MPI_Comm_rank(MPI_COMM_WORLD, &prank);
 
     char val_backup[csize-2];//value backup
-
+    int last_p_pos[2];//2 element array for saving pacman position from last iteration
 
 //-----------------------------------------GAME INITIALIZATION---------------------------------------
 
@@ -316,6 +317,8 @@ int main()
 	int pacman_start_x = coordinates[0];
 	int pacman_start_y = coordinates[1];
 	MPI_Send(coordinates, 2, MPI_INT, 1, 0, MPI_COMM_WORLD);
+	last_p_pos[0] = pacman_start_x;
+	last_p_pos[1] = pacman_start_y;
 
 	//generating ghosts starting points
 	for(int dest=2; dest<csize; dest++)
@@ -417,7 +420,9 @@ int main()
 	  }
 
 	  bool eaten = 0;
-	  eaten = collision_check(c_buff, buff_size);//checking for collision between pacman and ghost
+	  eaten = collision_check(c_buff, buff_size, last_p_pos);//checking for collision between pacman and ghost
+	  last_p_pos[0]=c_buff[0];
+	  last_p_pos[1]=c_buff[1];//saving last position
 
 	  flag = win_lose_play(local_mat, food, eaten, score);
 
@@ -429,7 +434,9 @@ int main()
 	  if(flag==2)
 	  {
 	    c = getchar();//getchar samples \n character as well -> solved with print_permit
-	    MPI_Send(&c, 1, MPI_CHAR, 1, 0, MPI_COMM_WORLD);
+	    if(c==27){flag=0;}//ESC ASCII = 27, terminate program
+
+	    if(flag==2) MPI_Send(&c, 1, MPI_CHAR, 1, 0, MPI_COMM_WORLD);
 
 	    if(c=='w' || c=='a' || c=='s' || c=='d')
 		{print_permit = 1;}
@@ -443,7 +450,8 @@ int main()
 	MPI_Bcast(&flag, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	if(flag==1 || flag==0)break;
+	if(flag==1 || flag==0)break;//TESTING TESTING TESTING
+
 
 	//PACMAN CONTROL - CORE 1
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -453,6 +461,7 @@ int main()
 	  MPI_Recv(&c, 1, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	  pacman_move(coordinates, c);
 	}
+
 
 	//GHOSTS CONTROL - CORE 2 3 ...
 	if(prank > 1)
